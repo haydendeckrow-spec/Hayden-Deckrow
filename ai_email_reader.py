@@ -10,15 +10,21 @@ response can't go out without a human checking it first.
 
 SETUP
 -----
-1. pip install anthropic
+1. pip install -r requirements.txt
 
-2. Set environment variables (don't hardcode credentials):
+2. Copy .env.example to .env and fill in your credentials (don't hardcode
+   them, and don't commit .env):
    EMAIL_ADDRESS      - your email address
-   EMAIL_APP_PASSWORD - an app-specific password (Gmail: Google Account
+   EMAIL_APP_PASSWORD - an app-specific password
+                         (iCloud: appleid.apple.com > Sign-In and Security
+                         > App-Specific Passwords; Gmail: Google Account
                          > Security > 2-Step Verification > App Passwords)
    ANTHROPIC_API_KEY  - your Anthropic API key
-   IMAP_SERVER        - e.g. imap.gmail.com
-   SMTP_SERVER        - e.g. smtp.gmail.com (used only for drafts)
+   IMAP_SERVER        - e.g. imap.mail.me.com (iCloud) or imap.gmail.com
+   SMTP_SERVER        - e.g. smtp.mail.me.com (iCloud) or smtp.gmail.com
+   DRAFTS_FOLDER      - the IMAP folder to save drafts to. Defaults to
+                         "Drafts" (iCloud); Gmail users should set this to
+                         "[Gmail]/Drafts".
 
 3. Run: python ai_email_reader.py
 
@@ -38,12 +44,16 @@ from email.header import decode_header
 from email.mime.text import MIMEText
 from email.utils import formataddr, make_msgid
 import anthropic
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ---------- CONFIG ----------
 EMAIL_ADDRESS = os.environ["EMAIL_ADDRESS"]
 EMAIL_APP_PASSWORD = os.environ["EMAIL_APP_PASSWORD"]
-IMAP_SERVER = os.environ.get("IMAP_SERVER", "imap.gmail.com")
-SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.gmail.com")
+IMAP_SERVER = os.environ.get("IMAP_SERVER", "imap.mail.me.com")
+SMTP_SERVER = os.environ.get("SMTP_SERVER", "smtp.mail.me.com")
+DRAFTS_FOLDER = os.environ.get("DRAFTS_FOLDER", "Drafts")
 ANTHROPIC_API_KEY = os.environ["ANTHROPIC_API_KEY"]
 
 MAX_EMAILS = 10          # how many unread emails to process per run
@@ -146,7 +156,7 @@ def save_draft(to_addr, subject, body):
 
     imap = imaplib.IMAP4_SSL(IMAP_SERVER)
     imap.login(EMAIL_ADDRESS, EMAIL_APP_PASSWORD)
-    imap.append('"[Gmail]/Drafts"', "", imaplib.Time2Internaldate(__import__("time").time()),
+    imap.append(f'"{DRAFTS_FOLDER}"', "", imaplib.Time2Internaldate(__import__("time").time()),
                 msg.as_bytes())
     imap.logout()
 
