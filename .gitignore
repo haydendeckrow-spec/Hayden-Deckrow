@@ -1,0 +1,9 @@
+# Local pipeline database — contains real contact details, never commit it
+followups.db
+*.db
+
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env
