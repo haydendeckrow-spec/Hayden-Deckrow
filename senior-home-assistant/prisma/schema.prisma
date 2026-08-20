@@ -1,0 +1,133 @@
+// Prisma schema for the Senior Home Assistance Subscription Platform.
+// SQLite is used for local/MVP development - swap the datasource provider
+// to "postgresql" and update DATABASE_URL when moving to production.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// SQLite has no native enum type, so Prisma enums aren't supported on this
+// datasource. The fields below are plain strings; allowed values are
+// enforced in application code - see lib/constants.js for the canonical list.
+//
+//   Role:         "CLIENT" | "FAMILY" | "ADMIN"
+//   Urgency:      "WHENEVER" | "THIS_WEEK" | "URGENT"
+//   TaskStatus:   "REQUESTED" | "SCHEDULED" | "COMPLETED"
+//   VisitStatus:  "SCHEDULED" | "COMPLETED" | "CANCELLED"
+//   InviteStatus: "PENDING" | "ACCEPTED"
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         String
+  createdAt    DateTime @default(now())
+
+  // For CLIENT users this is the client record they own.
+  // For FAMILY users this is the client record they were invited to.
+  client   Client? @relation("ClientOwner")
+  clientId String?
+  clientLink Client? @relation("ClientFamilyMembers", fields: [clientId], references: [id])
+
+  tasksCreated  Task[]         @relation("TaskCreatedBy")
+  notifications Notification[]
+}
+
+// SubscriptionTier holds the admin-editable base subscription pricing.
+// This keeps pricing out of hardcoded components per the app spec.
+model SubscriptionTier {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "Solo crew, weekly"
+  monthlyPrice Int     // stored in whole dollars
+  crewSize    Int
+  visitFrequency String // e.g. "Weekly"
+  flexVisitsPerMonth Int @default(2)
+  clients     Client[]
+}
+
+// UrgencyPricing holds the admin-editable on-demand / pop-in visit pricing.
+model UrgencyPricing {
+  id                  String  @id @default(cuid())
+  urgency             String  @unique
+  label               String
+  flatFee             Int // whole dollars; 0 = free
+  freeForSubscribers  Boolean @default(false)
+  nonSubscriberFee    Int // fee charged to non-subscribers
+}
+
+model Client {
+  id                  String   @id @default(cuid())
+  owner               User     @relation("ClientOwner", fields: [ownerUserId], references: [id])
+  ownerUserId         String   @unique
+  familyMembers       User[]   @relation("ClientFamilyMembers")
+
+  address             String
+  subscriptionTier    SubscriptionTier @relation(fields: [subscriptionTierId], references: [id])
+  subscriptionTierId  String
+  flexVisitsRemaining Int      @default(2)
+  active              Boolean  @default(true)
+  createdAt           DateTime @default(now())
+
+  tasks   Task[]
+  visits  Visit[]
+  invites FamilyInvite[]
+}
+
+model FamilyInvite {
+  id        String       @id @default(cuid())
+  client    Client       @relation(fields: [clientId], references: [id])
+  clientId  String
+  email     String
+  token     String       @unique
+  status    String       @default("PENDING")
+  createdAt DateTime     @default(now())
+}
+
+model Task {
+  id          String     @id @default(cuid())
+  client      Client     @relation(fields: [clientId], references: [id])
+  clientId    String
+  title       String
+  description String
+  photoUrl    String?
+  urgency     String
+  status      String     @default("REQUESTED")
+  priceQuote  Int        // estimated price in dollars at time of request
+  billable    Boolean    @default(false) // false when covered by flex visit / subscription
+
+  createdBy   User     @relation("TaskCreatedBy", fields: [createdById], references: [id])
+  createdById String
+  createdAt   DateTime @default(now())
+
+  visit   Visit?  @relation(fields: [visitId], references: [id])
+  visitId String?
+}
+
+model Visit {
+  id            String      @id @default(cuid())
+  client        Client      @relation(fields: [clientId], references: [id])
+  clientId      String
+  scheduledDate DateTime
+  crewAssigned  String?
+  status        String      @default("SCHEDULED")
+  notes         String?
+  photos        String?     // JSON-encoded array of photo URLs
+  createdAt     DateTime    @default(now())
+
+  tasks Task[]
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  message   String
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
